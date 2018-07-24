@@ -29,7 +29,6 @@ import static com.google.common.base.Preconditions.checkState;
 
 import net.minecraft.entity.item.EntityItem;
 import net.minecraft.entity.player.EntityPlayer;
-import net.minecraft.util.Tuple;
 import net.minecraft.util.math.BlockPos;
 import org.spongepowered.api.Sponge;
 import org.spongepowered.api.block.BlockSnapshot;
@@ -60,7 +59,6 @@ import org.spongepowered.common.event.tracking.context.ItemDropData;
 import org.spongepowered.common.event.tracking.phase.general.GeneralPhase;
 import org.spongepowered.common.interfaces.entity.player.IMixinInventoryPlayer;
 
-import java.util.ArrayDeque;
 import java.util.Collections;
 import java.util.Deque;
 import java.util.List;
@@ -83,7 +81,7 @@ public class PhaseContext<P extends PhaseContext<P>> implements AutoCloseable {
     @Nullable private static PhaseContext<?> EMPTY;
     /**
      * Default flagged empty PhaseContext that can be used for stubbing in corner cases.
-     * @return
+     * @return The empty context
      */
     public static PhaseContext<?> empty() {
         if (EMPTY == null) {
@@ -93,12 +91,48 @@ public class PhaseContext<P extends PhaseContext<P>> implements AutoCloseable {
     }
 
 
+    /**
+     * Specific {@link IPhaseState} that created this context. Used as a field to
+     * allow faster access since the state is guaranteed post constructor. Eliminates
+     * the necessity for tuple classes like PhaseData (from previous iterations of this
+     * tracking system).
+     */
+    public final IPhaseState<? extends P> state;
 
-    protected final IPhaseState<? extends P> state; // Only temporary to verify the state creation with constructors
+    /**
+     * Marks whether this phase context can be mutated
+     */
     protected boolean isCompleted = false;
+    /**
+     * Marks whether this phase context is empty. if it is, we should definitely not
+     * be doing any processing whatsoever.
+     */
+    private boolean isEmpty = false;
     // Only used in hard debugging instances.
     @Nullable private StackTraceElement[] stackTrace;
 
+
+    // Standard processing objects, we always have a source, but because of constructor mechanics, we
+    @Nullable private Object source;
+    // have to mark it as nullable.
+    @Nullable protected User owner;
+    @Nullable protected User notifier;
+
+    // Capture Lists and Flags
+    private boolean allowsBlockEvents = false; // Defaults to allow block events
+    private boolean allowsBulkBlockCaptures = false; // Defaults to allow block captures
+    private boolean allowsBlockPosCapture = false;
+    private boolean allowsPerBlockEntityCaptures = false; // Defaults to allow per block entity captures
+    private boolean allowsPerBlockItemStackCaptures = false; // Allows controlling whether ItemStacks are pre-merged captured for a block
+    private boolean allowsPerBlockItemEntityCaptures = false; // Allows controlling whether EntityItems are gathered per block
+    // Capture lists for entity stuff
+    private boolean allowsEntityEvents = false;
+    private boolean allowsBulkEntityCaptures = false;
+    private boolean allowsPerEntityDropCaptures = false;
+    private boolean allowsPerEntityItemStackCaptures = false;
+
+    // All of these fields are only going to be initialized if and only if their boolean counterparts are flipped to
+    // true, and only then when they are requested. If they are empty, they do nothing.
     @Nullable private CapturedBlocksSupplier blocksSupplier;
     @Nullable private BlockItemDropsSupplier blockItemDropsSupplier;
     @Nullable private BlockItemEntityDropsSupplier blockItemEntityDropsSupplier;
@@ -109,16 +143,17 @@ public class PhaseContext<P extends PhaseContext<P>> implements AutoCloseable {
     @Nullable private EntityItemEntityDropsSupplier entityItemEntityDropsSupplier;
     @Nullable private CapturedMultiMapSupplier<BlockPos, net.minecraft.entity.Entity> blockEntitySpawnSupplier;
     @Nullable private CaptureBlockPos captureBlockPos;
-    @Nullable protected User owner;
-    @Nullable protected User notifier;
-    private boolean processImmediately;
-    private boolean allowsBlockEvents = true; // Defaults to allow block events
-    private boolean allowsEntityEvents = true;
-    private boolean allowsBulkBlockCaptures = true; // Defaults to allow block captures
-    private boolean allowsBulkEntityCaptures = true;
+
+
+    /**
+     * CauseStackManager Lazy Loading any providers. Since we only push the phase context to the
+     * manager to keep track of, we don't actually push the state. So, if we do need to process
+     * we need to flip this boolean and then it's automatically handled in {@link #close()}.
+     */
+    boolean requiresCauseStackProcessing = false;
     @Nullable Deque<CauseStackManager.StackFrame> usedFrame;
 
-    @Nullable private Object source;
+    // Setup phase methods. All of these are only called before this context is switched in to the PhaseTracker
 
     public P source(Object owner) {
         checkState(!this.isCompleted, "Cannot add a new object to the context if it's already marked as completed!");
@@ -155,7 +190,7 @@ public class PhaseContext<P extends PhaseContext<P>> implements AutoCloseable {
     }
 
     private void checkBlockSuppliers() {
-        checkState(this.blocksSupplier == null, "BlocksSuppler is already set!");
+        checkState(!this.allowsBlockPosCapture, "BlocksSuppler is already set!");
         checkState(this.blockItemEntityDropsSupplier == null, "BlockItemEntityDropsSupplier is already set!");
         checkState(this.blockItemDropsSupplier == null, "BlockItemDropsSupplier is already set!");
         checkState(this.blockEntitySpawnSupplier == null, "BlockEntitySpawnSupplier is already set!");
@@ -164,13 +199,13 @@ public class PhaseContext<P extends PhaseContext<P>> implements AutoCloseable {
 
     public P addBlockCaptures() {
         checkState(!this.isCompleted, "Cannot add a new object to the context if it's already marked as completed!");
+        this.allowsBlockEvents = true;
+        this.allowsBlockPosCapture = true;
+        this.allowsBulkBlockCaptures = true;
+        this.allowsPerBlockEntityCaptures = true;
+        this.allowsPerBlockItemEntityCaptures = true;
+        this.allowsPerBlockItemStackCaptures = true;
         this.checkBlockSuppliers();
-
-        this.blocksSupplier = new CapturedBlocksSupplier();
-        this.blockItemEntityDropsSupplier = new BlockItemEntityDropsSupplier();
-        this.blockItemDropsSupplier = new BlockItemDropsSupplier();
-        this.blockEntitySpawnSupplier = new CapturedBlockEntitySpawnSupplier();
-        this.captureBlockPos = new CaptureBlockPos();
         return (P) this;
     }
 
@@ -182,10 +217,10 @@ public class PhaseContext<P extends PhaseContext<P>> implements AutoCloseable {
         checkState(this.capturedItemStackSupplier == null, "CapturedItemStackSupplier is already set!");
 
         this.blocksSupplier = new CapturedBlocksSupplier();
-        this.blockItemEntityDropsSupplier = new BlockItemEntityDropsSupplier();
-        this.blockItemDropsSupplier = new BlockItemDropsSupplier();
+        this.allowsPerBlockEntityCaptures = true;
+        this.allowsPerBlockItemStackCaptures = true;
+        this.allowsBulkEntityCaptures = true;
         this.capturedItemsSupplier = new CapturedItemsSupplier();
-        this.capturedEntitiesSupplier = new CapturedEntitiesSupplier();
         this.capturedItemStackSupplier = new CapturedItemStackSupplier();
 
         this.blockEntitySpawnSupplier = new CapturedBlockEntitySpawnSupplier();
@@ -199,6 +234,7 @@ public class PhaseContext<P extends PhaseContext<P>> implements AutoCloseable {
         checkState(this.capturedItemStackSupplier == null, "CapturedItemStackSupplier is already set!");
 
         this.capturedItemsSupplier = new CapturedItemsSupplier();
+        this.allowsBulkEntityCaptures = true;
         this.capturedEntitiesSupplier = new CapturedEntitiesSupplier();
         this.capturedItemStackSupplier = new CapturedItemStackSupplier();
         return (P) this;
@@ -209,6 +245,8 @@ public class PhaseContext<P extends PhaseContext<P>> implements AutoCloseable {
         checkState(this.entityItemDropsSupplier == null, "EntityItemDropsSupplier is already set!");
         checkState(this.entityItemEntityDropsSupplier == null, "EntityItemEntityDropsSupplier is already set!");
 
+        this.allowsPerEntityDropCaptures = true;
+        this.allowsPerEntityItemStackCaptures = true;
         this.entityItemDropsSupplier = new EntityItemDropsSupplier();
         this.entityItemEntityDropsSupplier = new EntityItemEntityDropsSupplier();
         return (P) this;
@@ -250,6 +288,16 @@ public class PhaseContext<P extends PhaseContext<P>> implements AutoCloseable {
         return this.allowsBulkEntityCaptures;
     }
 
+
+    /**
+     * This is our {@link IPhaseState} entrypoint into the {@link PhaseTracker}.
+     * At this point, we have officially entered the "state" from {@link #state}
+     * and are now ready to be processed as such. This also performs a standard
+     * debug check for whether an exception needs to be created. This usually
+     * helps only when it's needed to figure out where phases are being started.
+     *
+     * @return This context, for chaining and usually try with resources
+     */
     public P buildAndSwitch() {
         this.isCompleted = true;
         if (SpongeImpl.getGlobalConfig().getConfig().getPhaseTracker().generateStackTracePerStateEntry()) {
@@ -259,6 +307,11 @@ public class PhaseContext<P extends PhaseContext<P>> implements AutoCloseable {
         return (P) this;
     }
 
+    /**
+     * Gets whether this context is complete. Usually determined only for consumer
+     * use of the {@link PhaseContext}.
+     * @return
+     */
     public boolean isComplete() {
         return this.isCompleted;
     }
@@ -325,14 +378,6 @@ public class PhaseContext<P extends PhaseContext<P>> implements AutoCloseable {
     }
 
 
-    public boolean shouldProcessImmediately() {
-        return this.processImmediately;
-    }
-
-    public void setProcessImmediately(boolean state) {
-        this.processImmediately = state;
-    }
-
     @SuppressWarnings("unchecked")
     public <T> Optional<T> getSource(Class<T> sourceClass) {
         if (this.source == null) {
@@ -386,29 +431,35 @@ public class PhaseContext<P extends PhaseContext<P>> implements AutoCloseable {
     }
 
     public List<BlockSnapshot> getCapturedBlocks() throws IllegalStateException {
-        if (this.blocksSupplier == null) {
-            throw TrackingUtil.throwWithContext("Expected to be capturing blocks, but we're not capturing them!", this).get();
-        }
-        return this.blocksSupplier.get();
+        return this.getCapturedBlockSupplier().get();
     }
 
     public CapturedSupplier<BlockSnapshot> getCapturedBlockSupplier() throws IllegalStateException {
-        if (this.blocksSupplier == null) {
+        if (!this.allowsBulkBlockCaptures) {
             throw TrackingUtil.throwWithContext("Expected to be capturing blocks, but we're not capturing them!", this).get();
+        }
+        if (this.blocksSupplier == null) {
+            this.blocksSupplier = new CapturedBlocksSupplier();
         }
         return this.blocksSupplier;
     }
 
     public CapturedMultiMapSupplier<BlockPos, ItemDropData> getBlockDropSupplier() throws IllegalStateException {
-        if (this.blockItemDropsSupplier == null) {
+        if (!this.allowsPerBlockEntityCaptures) {
             throw TrackingUtil.throwWithContext("Expected to be capturing block drops!", this).get();
+        }
+        if (this.blockItemDropsSupplier == null) {
+            this.blockItemDropsSupplier = new BlockItemDropsSupplier();
         }
         return this.blockItemDropsSupplier;
     }
 
     public CapturedMultiMapSupplier<BlockPos, EntityItem> getBlockItemDropSupplier() throws IllegalStateException {
+        if (!this.allowsPerBlockEntityCaptures) {
+            throw TrackingUtil.throwWithContext("Expected to be capturing block drops!", this).get();
+        }
         if (this.blockItemEntityDropsSupplier == null) {
-            throw TrackingUtil.throwWithContext("Intended to track block item drops!", this).get();
+            this.blockItemEntityDropsSupplier = new BlockItemEntityDropsSupplier();
         }
         return this.blockItemEntityDropsSupplier;
     }
@@ -528,6 +579,7 @@ public class PhaseContext<P extends PhaseContext<P>> implements AutoCloseable {
     }
 
     protected P markEmpty() {
+        this.isEmpty = true;
         this.isCompleted = true;
         return (P) this;
     }
@@ -536,7 +588,7 @@ public class PhaseContext<P extends PhaseContext<P>> implements AutoCloseable {
         if (this == PhaseContext.EMPTY) {
             return true;
         }
-        return false;
+        return this.isEmpty;
     }
 
     @Override
@@ -587,4 +639,7 @@ public class PhaseContext<P extends PhaseContext<P>> implements AutoCloseable {
         }
     }
 
+    public boolean allowsPerBlockEntityCaptures() {
+        return this.allowsPerBlockEntityCaptures;
+    }
 }

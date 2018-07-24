@@ -840,8 +840,7 @@ public abstract class MixinEntityLivingBase extends MixinEntity implements Livin
     }
 
     @Override
-    public Optional<List<DamageFunction>> provideArmorModifiers(EntityLivingBase entityLivingBase,
-                                                                                                         DamageSource source, double damage) {
+    public Optional<List<DamageFunction>> provideArmorModifiers(EntityLivingBase entityLivingBase, DamageSource source, double damage) {
         return DamageEventHandler.createArmorModifiers(entityLivingBase, source, damage);
     }
 

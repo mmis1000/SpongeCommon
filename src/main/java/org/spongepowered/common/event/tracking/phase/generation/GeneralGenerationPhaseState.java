@@ -156,7 +156,7 @@ abstract class GeneralGenerationPhaseState<G extends GenerationContext<G>> imple
     }
 
     @Override
-    public boolean doesCaptureEntitySpawns() {
+    public boolean doesCaptureEntitySpawns(G context) {
         return false;
     }
 

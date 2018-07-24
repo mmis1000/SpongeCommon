@@ -165,7 +165,7 @@ public abstract class PacketState<P extends PacketContext<P>> implements IPhaseS
 
 
     @Override
-    public boolean doesCaptureEntitySpawns() {
+    public boolean doesCaptureEntitySpawns(P context) {
         return shouldCaptureEntity();
     }
 

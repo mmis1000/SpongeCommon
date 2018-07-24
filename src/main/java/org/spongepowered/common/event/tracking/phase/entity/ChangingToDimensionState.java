@@ -65,7 +65,7 @@ final class ChangingToDimensionState extends EntityPhaseState<TeleportingContext
     }
 
     @Override
-    public boolean doesCaptureEntitySpawns() {
+    public boolean doesCaptureEntitySpawns(TeleportingContext context) {
         return false;
     }
 

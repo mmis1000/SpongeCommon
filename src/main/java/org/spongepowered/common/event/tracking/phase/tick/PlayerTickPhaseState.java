@@ -101,7 +101,7 @@ class PlayerTickPhaseState extends TickPhaseState<PlayerTickContext> {
     }
 
     @Override
-    public boolean doesCaptureEntitySpawns() {
+    public boolean doesCaptureEntitySpawns(PlayerTickContext context) {
         return false;
     }
 

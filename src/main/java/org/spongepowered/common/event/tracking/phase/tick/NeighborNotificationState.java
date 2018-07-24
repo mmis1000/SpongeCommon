@@ -99,7 +99,7 @@ class NeighborNotificationState extends LocationBasedTickPhaseState<NeighborNoti
 
 
     @Override
-    public boolean doesCaptureEntitySpawns() {
+    public boolean doesCaptureEntitySpawns(NeighborNotificationContext context) {
         return false;
     }
 

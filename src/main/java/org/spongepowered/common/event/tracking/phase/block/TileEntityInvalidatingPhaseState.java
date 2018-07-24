@@ -72,7 +72,7 @@ public final class TileEntityInvalidatingPhaseState extends BlockPhaseState {
     }
 
     @Override
-    public boolean doesCaptureEntitySpawns() {
+    public boolean doesCaptureEntitySpawns(GeneralizedContext context) {
         return false;
     }
 

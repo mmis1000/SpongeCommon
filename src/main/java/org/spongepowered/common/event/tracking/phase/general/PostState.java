@@ -187,7 +187,7 @@ public final class PostState extends GeneralState<UnwindingPhaseContext> {
     }
 
     @Override
-    public boolean doesCaptureEntitySpawns() {
+    public boolean doesCaptureEntitySpawns(UnwindingPhaseContext context) {
         return false;
     }
 

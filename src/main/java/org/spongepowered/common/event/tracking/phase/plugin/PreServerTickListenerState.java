@@ -76,7 +76,7 @@ final class PreServerTickListenerState extends ListenerPhaseState {
     }
 
     @Override
-    public boolean doesCaptureEntitySpawns() {
+    public boolean doesCaptureEntitySpawns(ListenerPhaseContext context) {
         return false;
     }
 

@@ -263,6 +263,8 @@ public abstract class MixinWorld implements World, IMixinWorld {
     @Shadow public abstract void updateAllPlayersSleepingFlag();
     @Shadow public abstract boolean setBlockState(BlockPos pos, IBlockState state);
     @Shadow public abstract boolean setBlockState(BlockPos pos, IBlockState state, int flags);
+    @Shadow public abstract boolean destroyBlock(BlockPos pos, boolean dropBlock);
+    @Shadow protected abstract void playEvent(int i, BlockPos pos, int stateId);
     @Shadow public abstract void immediateBlockTick(BlockPos pos, IBlockState state, Random random);
     @Shadow public abstract void updateComparatorOutputLevel(BlockPos pos, Block blockIn);
     @Shadow public abstract void neighborChanged(BlockPos pos, final Block blockIn, BlockPos otherPos);

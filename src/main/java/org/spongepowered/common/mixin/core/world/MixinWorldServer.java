@@ -39,6 +39,7 @@ import net.minecraft.block.Block;
 import net.minecraft.block.BlockEventData;
 import net.minecraft.block.BlockPistonBase;
 import net.minecraft.block.ITileEntityProvider;
+import net.minecraft.block.material.Material;
 import net.minecraft.block.state.IBlockState;
 import net.minecraft.crash.CrashReportCategory;
 import net.minecraft.entity.effect.EntityLightningBolt;
@@ -1326,6 +1327,44 @@ public abstract class MixinWorldServer extends MixinWorld implements IMixinWorld
         return canAddEntity(entity) && PhaseTracker.getInstance().spawnEntity(this, EntityUtil.fromNative(entity));
     }
 
+    /**
+     * @author gabizou - July 20th, 2018
+     * @reason We need to be able to "monitor" that a block is being destroyed and any captured entities
+     * will be processed accordingly. Not sure why this wasn't eneded before, but now it very well is.
+     * This method is used by things like Villagers to "farm crops". The issue is that since the block
+     * is dropping items before the block is actually destroyed, we cannot safely capture the drops associated
+     * with the block removal.
+     *
+     * @param pos The position of the block to destroy
+     * @param dropBlock True whether
+     * @return
+     */
+    @Override
+    public boolean destroyBlock(BlockPos pos, boolean dropBlock) {
+        IBlockState iblockstate = this.getBlockState(pos);
+        Block block = iblockstate.getBlock();
+
+        if (iblockstate.getMaterial() == Material.AIR) {
+            return false;
+        } else {
+            this.playEvent(2001, pos, Block.getStateId(iblockstate));
+
+            // Sponge start - Initiate the captured block position for the proposed block drops, if the position is usable
+            // we can "wrap" the proposed block drops in our capture lists and process them as being spawned later, when the
+            // block is actually broken.
+            final PhaseData data = PhaseTracker.getInstance().getCurrentPhaseData();
+            data.state.doesCaptureEntitySpawns()
+
+            if (dropBlock) {
+                block.dropBlockAsItem((WorldServer) (Object) this, pos, iblockstate, 0);
+            }
+
+            // since we want to enable block captures if we're in a phase state that supports it.
+            // Otherwise, this does not
+            final boolean setState = this.setBlockState(pos, Blocks.AIR.getDefaultState(), 3);
+            return setState;
+        }
+    }
 
     /**
      * @author gabizou, March 12th, 2016
@@ -1589,7 +1628,7 @@ public abstract class MixinWorldServer extends MixinWorld implements IMixinWorld
                     }
                 }
             }
-            if (state.doesCaptureEntitySpawns()) {
+            if (((IPhaseState) state).doesCaptureEntitySpawns(context)) {
                 for (Entity entity : context.getCapturedEntities()) {
                     // We can ignore the type check because we're already checking the instance class of the entity.
                     if (clazz.isInstance(entity) && EntityUtil.toNative(entity).getEntityBoundingBox().intersects(aabb) && (filter == null || filter.apply((T) entity))) {

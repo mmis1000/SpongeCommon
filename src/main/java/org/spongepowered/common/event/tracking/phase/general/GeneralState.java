@@ -74,7 +74,7 @@ abstract class GeneralState<G extends PhaseContext<G>> implements IPhaseState<G>
     }
 
     @Override
-    public boolean doesCaptureEntitySpawns() {
+    public boolean doesCaptureEntitySpawns(G context) {
         return false;
     }
 

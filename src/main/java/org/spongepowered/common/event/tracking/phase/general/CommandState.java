@@ -200,7 +200,7 @@ final class CommandState extends GeneralState<CommandPhaseContext> implements IE
     }
 
     @Override
-    public boolean doesCaptureEntitySpawns() {
+    public boolean doesCaptureEntitySpawns(CommandPhaseContext context) {
         return false;
     }
 }

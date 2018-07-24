@@ -100,7 +100,7 @@ class DimensionTickPhaseState extends TickPhaseState<DimensionContext> {
     }
 
     @Override
-    public boolean doesCaptureEntitySpawns() {
+    public boolean doesCaptureEntitySpawns(DimensionContext context) {
         return false;
     }
 

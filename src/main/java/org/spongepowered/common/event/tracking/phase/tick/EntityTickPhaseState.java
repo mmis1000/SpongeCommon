@@ -278,8 +278,8 @@ class EntityTickPhaseState extends TickPhaseState<EntityTickContext> {
     }
 
     @Override
-    public boolean doesCaptureEntitySpawns() {
-        return false;
+    public boolean doesCaptureEntitySpawns(EntityTickContext context) {
+        return context.allowsBulkEntityCaptures();
     }
 
     /**

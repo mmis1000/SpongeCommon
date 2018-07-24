@@ -48,7 +48,6 @@ import org.spongepowered.api.event.cause.entity.spawn.SpawnTypes;
 import org.spongepowered.api.event.entity.SpawnEntityEvent;
 import org.spongepowered.api.item.inventory.ItemStack;
 import org.spongepowered.api.world.World;
-import org.spongepowered.asm.util.PrettyPrinter;
 import org.spongepowered.common.SpongeImplHooks;
 import org.spongepowered.common.entity.PlayerTracker;
 import org.spongepowered.common.event.SpongeCommonEventFactory;
@@ -491,9 +490,10 @@ public interface IPhaseState<C extends PhaseContext<C>> {
      * Gets whether this state will capture entity spawns during block changes.
      * Not 100% sure
      * @return
+     * @param context
      */
-    default boolean doesCaptureEntitySpawns() {
-        return false;
+    default boolean doesCaptureEntitySpawns(C context) {
+        return context.allowsBulkEntityCaptures() || context.allowsPerBlockEntityCaptures();
     }
     /**
      * An alternative to {@link #doesBulkBlockCapture(PhaseContext)} to where if capturing is expressly

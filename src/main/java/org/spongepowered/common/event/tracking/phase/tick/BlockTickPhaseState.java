@@ -110,17 +110,10 @@ class BlockTickPhaseState extends LocationBasedTickPhaseState<BlockTickContext> 
 
 
     @Override
-    public boolean doesCaptureEntitySpawns() {
+    public boolean doesCaptureEntitySpawns(BlockTickContext context) {
         return false;
     }
 
-    @Override
-    public void postTrackBlock(BlockSnapshot snapshot, BlockTickContext context) {
-        if (context.shouldProcessImmediately()) {
-            TrackingUtil.processBlockCaptures(context.getCapturedBlocks(), this, context);
-            context.getCapturedBlockSupplier().get().remove(snapshot);
-        }
-    }
 
     /**
      * Specifically overridden here because some states have defaults and don't check the context.

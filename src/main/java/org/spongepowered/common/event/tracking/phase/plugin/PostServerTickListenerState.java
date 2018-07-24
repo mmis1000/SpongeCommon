@@ -78,7 +78,7 @@ final class PostServerTickListenerState extends ListenerPhaseState {
     }
 
     @Override
-    public boolean doesCaptureEntitySpawns() {
+    public boolean doesCaptureEntitySpawns(ListenerPhaseContext context) {
         return false;
     }
 
