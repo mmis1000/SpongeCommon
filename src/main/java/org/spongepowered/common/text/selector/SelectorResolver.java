@@ -28,9 +28,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.flowpowered.math.vector.Vector3d;
 import com.flowpowered.math.vector.Vector3i;
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
-
 import org.spongepowered.api.Sponge;
 import org.spongepowered.api.command.CommandSource;
 import org.spongepowered.api.data.manipulator.mutable.DisplayNameData;
@@ -97,7 +95,8 @@ public class SelectorResolver {
         return null;
     }
 
-    private final CommandSource origin;
+    @Nullable private final CommandSource origin;
+    @Nullable private final Entity entityOrigin;
     private final Collection<Extent> extents;
     private final Vector3d position;
     private final Selector selector;
@@ -115,6 +114,11 @@ public class SelectorResolver {
         this.selector = checkNotNull(selector);
         this.extents = ImmutableSet.copyOf(extents);
         this.origin = origin;
+        if (this.origin instanceof Entity) {
+            this.entityOrigin = (Entity) origin;
+        } else {
+            this.entityOrigin = null;
+        }
         this.position = position == null ? Vector3d.ZERO : position;
         this.selectorFilter = makeFilter();
     }
@@ -147,14 +151,15 @@ public class SelectorResolver {
         Integer y = this.selector.get(ArgumentTypes.DIMENSION.y()).orElse(0);
         Integer z = this.selector.get(ArgumentTypes.DIMENSION.z()).orElse(0);
         AABB axisalignedbb = getAABB(this.position.toInt(), x, y, z);
-        filters.add(input -> {
-            Optional<AABB> entityAABB = ((Entity) this.origin).getBoundingBox();
-            return !entityAABB.isPresent() || axisalignedbb.intersects(axisalignedbb);
-        });
+
+        if (this.entityOrigin != null) {
+            filters.add(input -> this.entityOrigin.getBoundingBox().map(aabb -> aabb.intersects(axisalignedbb)).orElse(false));
+        }
     }
 
     private void addGamemodeFilters(List<Predicate<Entity>> filters) {
-        Optional<Invertible<GameMode>> gamemode = this.selector.getArgument(ArgumentTypes.GAME_MODE);
+        // TODO: For bleeding, update API to make ArgumentTypes.GAME_MODE invertible
+        Optional<Invertible<GameMode>> gamemode = this.selector.getArgument((ArgumentType.Invertible<GameMode>) ArgumentTypes.GAME_MODE);
         if (gamemode.isPresent()) {
             final GameMode actualMode = gamemode.get().getValue();
             // If the gamemode is NOT_SET, that means accept any
@@ -306,13 +311,17 @@ public class SelectorResolver {
         return new Vector3d(x.orElse(pos.getX()), y.orElse(pos.getY()), z.orElse(pos.getZ()));
     }
 
-    public List<Entity> resolve() {
+    // This returns an ImmutableSet as we want a guarantee of order. We're also using a set because API 7
+    // must return a set, so returning a list here will require another object to needlessly be created.
+    //
+    // TODO: For API 8, this can be a list instead.
+    public ImmutableSet<Entity> resolve() {
         SelectorType selectorType = this.selector.getType();
         if (selectorType == SelectorTypes.SOURCE) {
-            if (this.origin != null && this.origin instanceof Entity && this.selectorFilter.test((Entity) this.origin)) {
-                return ImmutableList.of((Entity) this.origin);
+            if (this.entityOrigin != null && this.selectorFilter.test(this.entityOrigin)) {
+                return ImmutableSet.of(this.entityOrigin);
             }
-            return ImmutableList.of();
+            return ImmutableSet.of();
         }
 
         int defaultCount = 1;
@@ -329,20 +338,20 @@ public class SelectorResolver {
 
         if (maxToSelect == 0) {
             return entityStream.sorted(distanceSort(isReversed))
-                    .collect(ImmutableList.toImmutableList());
+                    .collect(ImmutableSet.toImmutableSet());
         }
 
         if (selectorType == SelectorTypes.RANDOM) {
             List<Entity> holder = entityStream.collect(Collectors.toList());
-            if (holder.isEmpty()) return ImmutableList.of();
+            if (holder.isEmpty()) return ImmutableSet.of();
 
             Collections.shuffle(holder);
-            return ImmutableList.copyOf(holder.subList(0, maxToSelect));
+            return ImmutableSet.copyOf(holder.subList(0, maxToSelect));
         }
 
         return entityStream.sorted(distanceSort(isReversed))
                 .limit(maxToSelect)
-                .collect(ImmutableList.toImmutableList());
+                .collect(ImmutableSet.toImmutableSet());
     }
 
     private Comparator<? super Entity> distanceSort(boolean isReversed) {
@@ -357,10 +366,8 @@ public class SelectorResolver {
 
     private Set<? extends Extent> getExtentSet() {
         boolean location = this.selector.getArguments().stream()
-                .filter(arg -> LOCATION_BASED_ARGUMENTS.contains(arg.getType()))
-                .findAny()
-                .isPresent();
-        if (location && this.origin != null && this.origin instanceof Locatable) {
+                .anyMatch(arg -> LOCATION_BASED_ARGUMENTS.contains(arg.getType()));
+        if (location && this.origin instanceof Locatable) {
             return ImmutableSet.of(((Locatable) this.origin).getWorld());
         }
         return ImmutableSet.copyOf(this.extents);
