@@ -57,8 +57,8 @@ import javax.annotation.Nullable;
 
 /*
  * The Selector test provides the command `/test-selector` and prints out
- * the number of entities detected, along with all players and a sample of
- * UUIDs.
+ * the number of entities detected along with their positions and distance
+ * from the selector origin
  */
 @Plugin(id = "selector-test", name = "Selector Test")
 public class SelectorTest {
